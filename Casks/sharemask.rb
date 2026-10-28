@@ -24,16 +24,16 @@ cask "sharemask" do
 
   # Homebrew 7 install steps (replaces the deprecated `postflight` block):
   #  - strip quarantine (the app is signed with a self-signed certificate, not notarised);
-  #  - put App lock's keep-alive agent back if the uninstall step set it aside, and load it, so
-  #    sharemask relaunches on the new version.
+  #  - put App lock's keep-alive agent back if the uninstall step set it aside. It can't be loaded
+  #    from here: Homebrew 7 runs install steps in a sandbox that can't reach launchd ("Bootstrap
+  #    failed: 5"). It loads at the next login or when sharemask is opened; sharemask's own
+  #    "Update now" reloads it right away (its script runs in Terminal).
   postflight_steps do
     run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/sharemask.app"], must_succeed: false,
         writable_paths: ["sharemask.app"], writable_base: :appdir
     if_path_exists "Library/Caches/sharemask-agent.plist.upgrade", base: :home do
       move "Library/Caches/sharemask-agent.plist.upgrade", "Library/LaunchAgents/dev.sharemask.keepalive.plist",
            source_base: :home, target_base: :home
-      run "/bin/sh", args: ["-c", 'launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.sharemask.keepalive.plist"'],
-          must_succeed: false
     end
   end
 
@@ -41,6 +41,7 @@ cask "sharemask" do
     sharemask is not notarised; the quarantine flag was removed so it opens normally. If macOS
     still refuses, right-click the app and choose Open once. On first launch grant Screen Recording
     in System Settings → Privacy & Security → Screen & System Audio Recording.
+    After `brew upgrade`, open sharemask once (sharemask's own "Update now" relaunches it for you).
   EOS
 
   # App lock's optional keep-alive agent. On uninstall it's unloaded and set aside (no sudo); on an
