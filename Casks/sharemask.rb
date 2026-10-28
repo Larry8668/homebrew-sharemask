@@ -22,13 +22,18 @@ cask "sharemask" do
 
   app "sharemask.app"
 
-  postflight do
-    system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{appdir}/sharemask.app"], sudo: false
-    saved = File.expand_path("~/Library/Caches/sharemask-agent.plist.upgrade")
-    agent = File.expand_path("~/Library/LaunchAgents/dev.sharemask.keepalive.plist")
-    if File.exist?(saved)
-      FileUtils.mv(saved, agent)
-      system_command "/bin/launchctl", args: ["bootstrap", "gui/#{Process.uid}", agent], must_succeed: false
+  # Homebrew 7 install steps (replaces the deprecated `postflight` block):
+  #  - strip quarantine (the app is signed with a self-signed certificate, not notarised);
+  #  - put App lock's keep-alive agent back if the uninstall step set it aside, and load it, so
+  #    sharemask relaunches on the new version.
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/sharemask.app"], must_succeed: false,
+        writable_paths: ["sharemask.app"], writable_base: :appdir
+    if_path_exists "Library/Caches/sharemask-agent.plist.upgrade", base: :home do
+      move "Library/Caches/sharemask-agent.plist.upgrade", "Library/LaunchAgents/dev.sharemask.keepalive.plist",
+           source_base: :home, target_base: :home
+      run "/bin/sh", args: ["-c", 'launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.sharemask.keepalive.plist"'],
+          must_succeed: false
     end
   end
 
